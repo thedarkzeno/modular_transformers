@@ -41,6 +41,7 @@ class Trainer():
         batched=False, 
         batch_size=batch_size, 
     )
+    train_data.set_format(type='torch', columns=['input', 'labels', 'mask'])
     self.train_data = train_data
     self.train_dataloader = DataLoader(
         train_data["train"], shuffle=True, batch_size=batch_size
