@@ -3,7 +3,6 @@ import torch.fft
 from torch import nn
 from torch.nn import functional as F
 
-
 class FeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()

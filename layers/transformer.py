@@ -1,5 +1,20 @@
-import torch.nn as nn
+import torch
 from .selfAttention import MultiHeadAttention
+from torch import nn
+from torch.nn import functional as F
+
+class FeedForward(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout1 = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, x):
+        x = self.dropout1(F.gelu(self.fc1(x)))
+        out = self.dropout2(self.fc2(x))
+        return out
 
 
 class TransformerLayer(nn.Module):
@@ -12,27 +27,15 @@ class TransformerLayer(nn.Module):
         self.head_size = config.hidden_size // config.num_attention_heads
         self.MultiHeadAttention = MultiHeadAttention(
             config.num_attention_heads, config.hidden_size, self.head_size, self.head_size)
-        # self output
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout1 = nn.Dropout(config.hidden_dropout_prob)
-        # intermediate
-        self.intermediate = nn.Linear(
-            config.hidden_size, config.intermediate_size)
-        # output
-        self.output = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.outputLayerNorm = nn.LayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
+        self.ff = FeedForward(config)
+        self.norm1 = nn.LayerNorm(config.hidden_size)
+        self.norm2 = nn.LayerNorm(config.hidden_size)
 
     def forward(self, x):
+        residual = x
         x = self.MultiHeadAttention(x, x, x)
-        x = self.dense(x)
-        x = self.LayerNorm(x)
-        x = self.dropout1(x)
-        x = self.intermediate(x)
-        x = self.output(x)
-        x = self.outputLayerNorm(x)
-        x = self.dropout2(x)
-        return x
+        x = self.norm1(x + residual)
+        residual = x
+        x = self.ff(x)
+        out = self.norm2(x + residual)
+        return out
