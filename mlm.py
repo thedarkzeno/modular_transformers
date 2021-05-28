@@ -1,19 +1,11 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from transformers import BertTokenizerFast
 from datasets import load_dataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
-from model import Model
-from layers.transformer import TransformerLayer
-from layers.fnet import FNetLayer
-from config import Config, LayerConfig
 import torch.nn as nn
-
-
-tokenizer = BertTokenizerFast.from_pretrained("neuralmind/bert-base-portuguese-cased")
 
 def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
     probs=torch.zeros_like(t).float().uniform_(0, 1)
@@ -51,7 +43,7 @@ class Trainer():
     )
     self.train_data = train_data
     self.train_dataloader = DataLoader(
-        train_data, shuffle=True, batch_size=batch_size
+        train_data["train"], shuffle=True, batch_size=batch_size
     )
   def fit_mlm(self, model, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, device="cpu"):
     assert (self.train_dataloader is not None), "You need to prepare the dataset first"

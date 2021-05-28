@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from pathlib import Path
-from config import Config, LayerConfig
-from layers import *
+from .config import Config, LayerConfig
+from .layers import *
 import json
 
 class Model(nn.Module):
