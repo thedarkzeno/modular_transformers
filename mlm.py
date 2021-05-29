@@ -15,7 +15,7 @@ def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], 
     shape = tokens_tensor.shape
     tokens_tensor = tokens_tensor.reshape(-1)
     ignore_mask = torch.tensor([v in [101, 102, 0] for v in tokens_tensor]).reshape(shape)
-    ignore_mask = torch.tensor([v in ignore_tokens for v in t])
+    # ignore_mask = torch.tensor([v in ignore_tokens for v in t])
 
     non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
 
