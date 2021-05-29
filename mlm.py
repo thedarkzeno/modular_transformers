@@ -10,6 +10,11 @@ import torch.nn as nn
 def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
     probs=torch.zeros_like(t).float().uniform_(0, 1)
     non_masked_tokens = probs < 1 - prob
+
+    tokens_tensor = torch.tensor(t)
+    shape = tokens_tensor.shape
+    tokens_tensor = tokens_tensor.reshape(-1)
+    ignore_mask = torch.tensor([v in [101, 102, 0] for v in tokens_tensor]).reshape(shape)
     ignore_mask = torch.tensor([v in ignore_tokens for v in t])
 
     non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
@@ -27,18 +32,18 @@ class Trainer():
     self.train_dataloader = None
   
   def process_data_to_model_inputs(self, batch):
-    tokens = torch.tensor(self.tokenizer.encode(batch["text"], padding="max_length", truncation=True, max_length=128))
+    tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
     masked, mask = mask_with_prob(tokens, 0.15)
-    batch["input"] = masked
-    batch["mask"] = mask
-    batch["labels"] = tokens
+    batch["input"] = masked.tolist()
+    batch["mask"] = mask.tolist()
+    batch["labels"] = tokens.tolist()
     return batch
 
   def prepare_dataset(self, file, batch_size):
     dataset = load_dataset('text', data_files={'train': file})
     train_data = dataset.map(
         self.process_data_to_model_inputs, 
-        batched=False, 
+        batched=True, 
         batch_size=batch_size, 
     )
     train_data.set_format(type='torch', columns=['input', 'labels', 'mask'])
