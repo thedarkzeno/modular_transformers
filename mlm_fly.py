@@ -46,9 +46,9 @@ class Trainer():
   def process_data_to_model_inputs(self, batch):
     tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
     masked, mask = mask_with_prob(tokens, 0.15)
-    batch["input"] = masked.tolist()
-    batch["mask"] = mask.tolist()
-    batch["labels"] = tokens.tolist()
+    batch["input"] = masked
+    batch["mask"] = mask
+    batch["labels"] = tokens
     return batch
 
   def prepare_dataset(self, file, batch_size):
