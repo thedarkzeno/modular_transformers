@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
@@ -14,7 +14,7 @@ def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], 
     tokens_tensor = torch.tensor(t)
     shape = tokens_tensor.shape
     tokens_tensor = tokens_tensor.reshape(-1)
-    ignore_mask = torch.tensor([v in [101, 102, 0] for v in tokens_tensor]).reshape(shape)
+    ignore_mask = torch.tensor([v in ignore_tokens for v in tokens_tensor]).reshape(shape)
     # ignore_mask = torch.tensor([v in ignore_tokens for v in t])
 
     non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
@@ -46,6 +46,13 @@ class Trainer():
         batched=True, 
         batch_size=batch_size, 
     )
+    train_data.set_format(type='torch', columns=['input', 'labels', 'mask'])
+    self.train_data = train_data
+    self.train_dataloader = DataLoader(
+        train_data["train"], shuffle=True, batch_size=batch_size
+    )
+  def load_dataset_from_disk(self, file, batch_size):
+    train_data = load_from_disk(file)
     train_data.set_format(type='torch', columns=['input', 'labels', 'mask'])
     self.train_data = train_data
     self.train_dataloader = DataLoader(
