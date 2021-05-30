@@ -72,7 +72,7 @@ class Trainer():
       for step, batch in enumerate(self.train_dataloader):
         optimizer.zero_grad()
         batch = self.process_data_to_model_inputs(batch)
-        batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
+        # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
         outputs = model(batch['input'].to(device), batch['mask'].to(device))
         label = batch['labels'].to(device)
         outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
