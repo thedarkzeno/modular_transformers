@@ -7,6 +7,18 @@ from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 import torch.nn as nn
 
+def getIgnoreMask(tokens_tensor, ignore_tokens):
+  result = []
+  finished = False
+  for v in tokens_tensor:
+    if finished == False:
+      result.append(v in ignore_tokens)
+      if v == 0:         ### Once it gets to the padding you don't need to check anymore
+        finished = True
+    else:
+      result.append(True)
+  return result
+
 def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
     probs=torch.zeros_like(t).float().uniform_(0, 1)
     non_masked_tokens = probs < 1 - prob
@@ -14,7 +26,7 @@ def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], 
     tokens_tensor = torch.tensor(t)
     shape = tokens_tensor.shape
     tokens_tensor = tokens_tensor.reshape(-1)
-    ignore_mask = torch.tensor([v in ignore_tokens for v in tokens_tensor]).reshape(shape)
+    ignore_mask = torch.tensor(getIgnoreMask(tokens_tensor, ignore_tokens)).reshape(shape)
     # ignore_mask = torch.tensor([v in ignore_tokens for v in t])
 
     non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
