@@ -59,7 +59,7 @@ class Trainer():
     
   def fit_mlm(self, model, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, device="cpu"):
     assert (self.train_dataloader is not None), "You need to prepare the dataset first"
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(ignore_index=0)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=False)
     steps = self.train_dataloader.dataset.num_rows//self.train_dataloader.batch_size 
     scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, steps)
@@ -75,8 +75,9 @@ class Trainer():
         # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
         outputs = model(batch['input'].to(device), batch['mask'].to(device))
         label = batch['labels'].to(device)
+        mask = batch['mask'].to(device)
         outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
-        label = label.reshape(-1)
+        label = label.reshape(-1) * mask.reshape(-1)
 
         # outputs = outputs.detach().cpu()
         loss = criterion(outputs, label)
