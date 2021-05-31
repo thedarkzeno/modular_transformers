@@ -80,7 +80,7 @@ class Trainer():
         label = batch['labels'].to(device)
         mask = batch['mask'].to(device)
         outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
-        # label = label.reshape(-1)
+        label = label.reshape(-1)
         label = label * mask.reshape(-1)
 
         # outputs = outputs.detach().cpu()
