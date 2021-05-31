@@ -48,7 +48,7 @@ class Trainer():
   
   def process_data_to_model_inputs(self, batch):
     tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
-    masked, mask = mask_with_prob(tokens, 0.15, 0.9)
+    masked, mask = mask_with_prob(tokens, 0.3, 0.5)
     batch["input"] = masked
     batch["mask"] = mask
     batch["labels"] = tokens
@@ -76,12 +76,12 @@ class Trainer():
         optimizer.zero_grad()
         batch = self.process_data_to_model_inputs(batch)
         # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
-        outputs = model(batch['input'].to(device), batch['mask'].to(device))
+        outputs = model(batch['input'].to(device))#model(batch['input'].to(device), batch['mask'].to(device))
         label = batch['labels'].to(device)
-        mask = batch['mask'].to(device)
+        # mask = batch['mask'].to(device)
         outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
         label = label.reshape(-1)
-        label = label * mask.reshape(-1)
+        # label = label * mask.reshape(-1)
 
         # outputs = outputs.detach().cpu()
         loss = criterion(outputs, label)
