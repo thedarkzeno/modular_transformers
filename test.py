@@ -1,26 +1,27 @@
-from torch.nn.functional import layer_norm
-from model import Model
-from layers.transformer import TransformerLayer
-from layers.fnet import FNetLayer
-from config import Config, LayerConfig
-import numpy as np
+# from torch.nn.functional import layer_norm
+# from model import Model
+# from layers.transformer import TransformerLayer
+# from layers.fnet import FNetLayer
+# from config import Config, LayerConfig
+# import numpy as np
 import torch
-import time
-import matplotlib.pyplot as plt
+# import time
+# import matplotlib.pyplot as plt
+from mlm_fly import mask_with_prob
 
 
-modelConfig = Config()
-layerConfig = LayerConfig()
+# modelConfig = Config()
+# layerConfig = LayerConfig()
 
 # model = Model.from_pretrained("./model")
 # model.save_pretrained("./model2")
 
-transformerLayers = [TransformerLayer(layerConfig) for _ in range(2)]
-fnetLayers = [FNetLayer(layerConfig) for _ in range(10)]
+# transformerLayers = [TransformerLayer(layerConfig) for _ in range(2)]
+# fnetLayers = [FNetLayer(layerConfig) for _ in range(10)]
 
-transformerLayers.extend(fnetLayers)
+# transformerLayers.extend(fnetLayers)
 
-model = Model(config=modelConfig, layers=transformerLayers)
+# model = Model(config=modelConfig, layers=transformerLayers)
 
 # model.save_pretrained("./model")
 # size = []
@@ -30,7 +31,8 @@ model = Model(config=modelConfig, layers=transformerLayers)
 # lt =0
 # initial_value=100
 
-inputs = torch.randint(0, 100, (5,100))#[torch.randint(0, 100, (1,512)) for _ in range(5)]
+inputs = torch.randint(0, 100, (1,20))#[torch.randint(0, 100, (1,512)) for _ in range(5)]
+print(mask_with_prob(inputs, .50, .5), inputs)
 # inputs = [torch.randint(0, 100, (10,10)) for _ in range(5)]
 # inputs = torch.cat(inputs).view(5, -1)
 # print('input ',inputs.shape)
@@ -38,8 +40,8 @@ inputs = torch.randint(0, 100, (5,100))#[torch.randint(0, 100, (1,512)) for _ in
 # print(torch.cat(inputs).view(10, len(inputs), 1, -1))
 # print(torch.cat(inputs).view(10, len(inputs), 1, -1).shape)
 
-res = model(inputs)
-print(res.shape)
+# res = model(inputs)
+# print(res.shape)
 # print(torch.zeros_like(torch.tensor([1,2,3,4,5,6,7,8,9,10])).float().uniform_(0, 1) < 0.15)
 
 # for s in range(initial_value, 500, 100):

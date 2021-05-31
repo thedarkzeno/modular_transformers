@@ -19,11 +19,13 @@ def getIgnoreMask(tokens_tensor, ignore_tokens):
       result.append(True)
   return result
 
-def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
+def mask_with_prob(t: Tensor, prob: float, replace_prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
     probs=torch.zeros_like(t).float().uniform_(0, 1)
+    probs2=torch.zeros_like(t).float().uniform_(0, 1)
     non_masked_tokens = probs < 1 - prob
+    replace_mask = probs2 < replace_prob
 
-    tokens_tensor = torch.tensor(t)
+    tokens_tensor = t.detach().clone()
     shape = tokens_tensor.shape
     tokens_tensor = tokens_tensor.reshape(-1)
     ignore_mask = torch.tensor(getIgnoreMask(tokens_tensor, ignore_tokens)).reshape(shape)
@@ -32,8 +34,9 @@ def mask_with_prob(t: Tensor, prob: float, ignore_tokens: list = [101, 102, 0], 
     non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
 
     masked_tokens = (~non_masked_tokens)
-    non_masked_tokens = non_masked_tokens
-    mask = torch.tensor([mask_index]) * masked_tokens
+    non_masked_tokens = torch.logical_and(non_masked_tokens, ~replace_mask)
+    mask = torch.tensor([mask_index]) * torch.logical_and(masked_tokens, replace_mask)
+
     return t*non_masked_tokens + mask, masked_tokens * 1
 
 
@@ -45,7 +48,7 @@ class Trainer():
   
   def process_data_to_model_inputs(self, batch):
     tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
-    masked, mask = mask_with_prob(tokens, 0.15)
+    masked, mask = mask_with_prob(tokens, 0.15, 0.9)
     batch["input"] = masked
     batch["mask"] = mask
     batch["labels"] = tokens
@@ -77,7 +80,8 @@ class Trainer():
         label = batch['labels'].to(device)
         mask = batch['mask'].to(device)
         outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
-        label = label.reshape(-1) * mask.reshape(-1)
+        # label = label.reshape(-1)
+        label = label * mask.reshape(-1)
 
         # outputs = outputs.detach().cpu()
         loss = criterion(outputs, label)
