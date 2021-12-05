@@ -28,8 +28,9 @@ class MultiHeadAttention(nn.Module):
         )
         #self.linear = nn.Linear(num_heads * dim_v, dim_in)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
-        # return self.linear(
-        #     torch.cat([h(query, key, value) for h in self.heads], dim=-1)
-        # )
+    def forward(self, query: Tensor, key: Tensor=None, value: Tensor=None) -> Tensor:
+        if key == None:
+            key = query
+        if value == None:
+            value = query
         return torch.cat([h(query, key, value) for h in self.heads], dim=-1)

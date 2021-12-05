@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from pathlib import Path
-from .config import Config, LayerConfig
-from .layers import *
+from config import Config, LayerConfig
+from layers import *
 import json
 
 class Model(nn.Module):
@@ -15,7 +15,7 @@ class Model(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layers = nn.ModuleList(layers)
-        self.output = nn.Linear(config.hidden_size, config.vocab_size)
+        self.output = nn.Linear(config.hidden_size * config.columns, config.vocab_size)
         
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
     
@@ -41,10 +41,11 @@ class Model(nn.Module):
         for layer in data["layers"]:
             config = LayerConfig()
             config.fromDict(layer)
-            if layer["name"] == "TransformerLayer":
-                layer_to_add = transformer.TransformerLayer(config)
-            if layer["name"] == "FNetLayer":
-                layer_to_add = fnet.FNetLayer(config)
+            layer_to_add = transformer.TransformerLayer(config)
+            # if layer["name"] == "TransformerLayer":
+            #     layer_to_add = transformer.TransformerLayer(config)
+            # if layer["name"] == "FNetLayer":
+            #     layer_to_add = fnet.FNetLayer(config)
             layers.append(layer_to_add)
         model = Model(base_config, layers)
         model.load_state_dict(torch.load(path+"/model.bin"))
@@ -61,7 +62,17 @@ class Model(nn.Module):
         x += self.position_embeddings(position_ids)
         if mask is not None:
             x += self.mask_embedding(mask)
-        for layer in self.layers:
-            x = layer(x)
-        x = self.output(x)
+        out = []
+        layers = len(self.layers) / self.config.columns
+        for i, layer in enumerate(self.layers):
+            if i % layers == 0:
+                if i >0:
+                    out.append(o)
+                o = layer(x)
+            else:
+                o = layer(o)
+        out.append(o)
+        y = torch.cat(out, dim=-1)
+
+        x = self.output(y)
         return x

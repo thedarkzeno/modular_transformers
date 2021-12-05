@@ -1,5 +1,5 @@
 import torch
-from .selfAttention import MultiHeadAttention
+from .attention import MultiHeadAttention, fourier_transform
 from torch import nn
 from torch.nn import functional as F
 
@@ -22,18 +22,24 @@ class TransformerLayer(nn.Module):
         super().__init__()
         self.name = "TransformerLayer"
         self.config = config
-        assert(config.hidden_size % config.num_attention_heads ==
-               0), "hidden_size should be divisible by num_attention_heads"
-        self.head_size = config.hidden_size // config.num_attention_heads
-        self.MultiHeadAttention = MultiHeadAttention(
-            config.num_attention_heads, config.hidden_size, self.head_size, self.head_size)
+        # define the type of attention
+        if self.config.attention_type == "fourier":
+            self.attention=fourier_transform
+
+        elif self.config.attention_type == "selfAttention":
+            assert(config.hidden_size % config.num_attention_heads ==
+                0), "hidden_size should be divisible by num_attention_heads"
+            self.head_size = config.hidden_size // config.num_attention_heads
+            self.attention = MultiHeadAttention(
+                config.num_attention_heads, config.hidden_size, self.head_size, self.head_size)
+
         self.ff = FeedForward(config)
         self.norm1 = nn.LayerNorm(config.hidden_size)
         self.norm2 = nn.LayerNorm(config.hidden_size)
 
     def forward(self, x):
         residual = x
-        x = self.MultiHeadAttention(x, x, x)
+        x = self.attention(x)
         x = self.norm1(x + residual)
         residual = x
         x = self.ff(x)
