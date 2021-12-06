@@ -76,7 +76,9 @@ class Model(nn.Module):
 
 class ModelForMaskedLM(nn.Module):
     def __init__(self, config, layers):
-        super().__init__(config, layers)
+        super().__init__()
+        self.config = config
+        self.layers=layers
         self.baseModel = Model(config, layers)
         self.output = nn.Linear(config.hidden_size * config.columns, config.vocab_size)
         

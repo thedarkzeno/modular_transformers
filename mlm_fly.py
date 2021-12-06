@@ -19,18 +19,17 @@ def getIgnoreMask(tokens_tensor, ignore_tokens):
       result.append(True)
   return result
 
-def torch_mask_tokens(inputs, special_tokens = [101, 102], vocab_size=30000):
+def torch_mask_tokens(inputs, tokenizer, mlm_probability=0.15):
     """
     Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
     """
-    mlm_probability=0.15
     labels = inputs.clone()
     # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
     probability_matrix = torch.full(labels.shape, mlm_probability)
     
     special_tokens_mask = [
-        val in special_tokens for val in labels.tolist()
-    ]
+                tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
+            ]
     special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
     
 
@@ -45,7 +44,7 @@ def torch_mask_tokens(inputs, special_tokens = [101, 102], vocab_size=30000):
 
     # 10% of the time, we replace masked input tokens with random word
     indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_words = torch.randint(vocab_size, labels.shape, dtype=torch.long)
+    random_words = torch.randint(len(tokenizer), labels.shape, dtype=torch.long)
     inputs[indices_random] = random_words[indices_random]
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -60,7 +59,7 @@ class Trainer():
   
   def process_data_to_model_inputs(self, batch):
     tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
-    inputs, labels, mask = torch_mask_tokens(tokens, vocab_size=len(self.tokenizer))
+    inputs, labels, mask = torch_mask_tokens(tokens, tokenizer=self.tokenizer)
     batch["input"] = inputs
     batch["mask"] = mask
     batch["labels"] = labels
@@ -74,7 +73,7 @@ class Trainer():
     
   def fit_mlm(self, model, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, device="cpu"):
     assert (self.train_dataloader is not None), "You need to prepare the dataset first"
-    criterion = nn.CrossEntropyLoss(ignore_index=0)
+    criterion = nn.CrossEntropyLoss(ignore_index=-100)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=False)
     steps = self.train_dataloader.dataset.num_rows//self.train_dataloader.batch_size 
     scheduler = get_linear_schedule_with_warmup(optimizer, warmup_steps, steps)
@@ -90,12 +89,7 @@ class Trainer():
         # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
         outputs = model(batch['input'].to(device))#model(batch['input'].to(device), batch['mask'].to(device))
         label = batch['labels'].to(device)
-        # mask = batch['mask'].to(device)
-        #outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
-        #label = label.reshape(-1)
-        # label = label * mask.reshape(-1)
 
-        # outputs = outputs.detach().cpu()
         loss = criterion(outputs.transpose(1, 2), label)
 
         # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
