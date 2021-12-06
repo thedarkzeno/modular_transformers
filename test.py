@@ -18,15 +18,15 @@ transformerLayers = transformerLayers + [gMLPBlock(layerConfig) for _ in range(6
 
 
 model = Model(config=modelConfig, layers=transformerLayers)
-
+model.save_pretrained("./model/")
 
 # [torch.randint(0, 100, (1,512)) for _ in range(5)]
-inputs = torch.randint(0, 100, (5, 512))
-print(inputs.shape)
+# inputs = torch.randint(0, 100, (5, 512))
+# print(inputs.shape)
 
-t1 = time.time()
-for i in range(10):
-    res = model(inputs)
-t2 = time.time()
-print(res.shape)
-print(t2-t1)
+# t1 = time.time()
+# for i in range(10):
+#     res = model(inputs)
+# t2 = time.time()
+# print(res.shape)
+# print(t2-t1)

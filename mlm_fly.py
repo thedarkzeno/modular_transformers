@@ -19,25 +19,37 @@ def getIgnoreMask(tokens_tensor, ignore_tokens):
       result.append(True)
   return result
 
-def mask_with_prob(t: Tensor, prob: float, replace_prob: float, ignore_tokens: list = [101, 102, 0], mask_index: int=103) -> Tuple[Tensor, Tensor]:
-    probs=torch.zeros_like(t).float().uniform_(0, 1)
-    probs2=torch.zeros_like(t).float().uniform_(0, 1)
-    non_masked_tokens = probs < 1 - prob
-    replace_mask = probs2 < replace_prob
+def torch_mask_tokens(inputs, special_tokens = [101, 102], vocab_size=30000):
+    """
+    Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+    """
+    mlm_probability=0.15
+    labels = inputs.clone()
+    # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+    probability_matrix = torch.full(labels.shape, mlm_probability)
+    
+    special_tokens_mask = [
+        val in special_tokens for val in labels.tolist()
+    ]
+    special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+    
 
-    tokens_tensor = t.detach().clone()
-    shape = tokens_tensor.shape
-    tokens_tensor = tokens_tensor.reshape(-1)
-    ignore_mask = torch.tensor(getIgnoreMask(tokens_tensor, ignore_tokens)).reshape(shape)
-    # ignore_mask = torch.tensor([v in ignore_tokens for v in t])
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+    labels[~masked_indices] = -100  # We only compute loss on masked tokens
+    
 
-    non_masked_tokens = torch.logical_or(non_masked_tokens, ignore_mask)
+    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+    indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+    inputs[indices_replaced] = 103 #self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
 
-    masked_tokens = (~non_masked_tokens)
-    non_masked_tokens = torch.logical_and(non_masked_tokens, ~replace_mask)
-    mask = torch.tensor([mask_index]) * torch.logical_and(masked_tokens, replace_mask)
+    # 10% of the time, we replace masked input tokens with random word
+    indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+    random_words = torch.randint(vocab_size, labels.shape, dtype=torch.long)
+    inputs[indices_random] = random_words[indices_random]
 
-    return t*non_masked_tokens + mask, masked_tokens * 1
+    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+    return inputs, labels, masked_indices*1
 
 
 class Trainer():
@@ -48,10 +60,10 @@ class Trainer():
   
   def process_data_to_model_inputs(self, batch):
     tokens = torch.tensor(self.tokenizer.batch_encode_plus(batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
-    masked, mask = mask_with_prob(tokens, 0.3, 0.5)
-    batch["input"] = masked
+    inputs, labels, mask = torch_mask_tokens(tokens, vocab_size=len(self.tokenizer))
+    batch["input"] = inputs
     batch["mask"] = mask
-    batch["labels"] = tokens
+    batch["labels"] = labels
     return batch
 
   def prepare_dataset(self, file, batch_size):
@@ -79,12 +91,14 @@ class Trainer():
         outputs = model(batch['input'].to(device))#model(batch['input'].to(device), batch['mask'].to(device))
         label = batch['labels'].to(device)
         # mask = batch['mask'].to(device)
-        outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
-        label = label.reshape(-1)
+        #outputs = outputs.reshape(outputs.size(0)*outputs.size(1), -1)  # (batch * seq_len x classes)
+        #label = label.reshape(-1)
         # label = label * mask.reshape(-1)
 
         # outputs = outputs.detach().cpu()
-        loss = criterion(outputs, label)
+        loss = criterion(outputs.transpose(1, 2), label)
+
+        # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
 
         loss.backward()
         optimizer.step()
