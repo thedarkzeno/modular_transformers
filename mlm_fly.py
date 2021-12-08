@@ -122,10 +122,11 @@ class Trainer():
                     model.eval()
                     losses = []
                     for eval_step, eval_batch in enumerate(self.eval_dataloader):
+                        eval_batch = self.process_data_to_model_inputs(eval_batch)
                         with torch.no_grad():
-                            outputs = model(**eval_batch)
-
-                        loss = outputs.loss
+                            outputs = model(eval_batch['input'].to(device))
+                        label = batch['labels'].to(device)
+                        loss = criterion(outputs.transpose(1, 2), label)
                         losses.append(loss)
 
                     losses = torch.cat(losses)
