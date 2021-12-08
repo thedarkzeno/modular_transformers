@@ -99,7 +99,7 @@ class Trainer():
         # training loop
         pbar = tqdm(range(epochs), desc="Epochs")
         for epoch in pbar:
-
+            perplexity = 0
             for step, batch in enumerate(self.train_dataloader):
                 model.train()
                 optimizer.zero_grad()
@@ -117,7 +117,7 @@ class Trainer():
                 optimizer.step()
                 scheduler.step()
                 # eval step
-                perplexity = 0
+                
                 if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
                     model.eval()
                     losses = []
@@ -129,7 +129,8 @@ class Trainer():
                         loss = criterion(outputs.transpose(1, 2), label)
                         losses.append(loss)
 
-                    losses = torch.cat(losses)
+                    #losses = torch.cat(losses)
+                    losses = torch.tensor(losses)
                     losses = losses[: len(self.eval_data)]
                     try:
                         perplexity = math.exp(torch.mean(losses))
