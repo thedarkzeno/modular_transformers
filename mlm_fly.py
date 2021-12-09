@@ -91,7 +91,7 @@ class Trainer():
         criterion = nn.CrossEntropyLoss(ignore_index=-100)
         optimizer = torch.optim.AdamW(model.parameters(
         ), lr=learning_rate, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=False)
-        steps = self.train_dataloader.dataset.num_rows//self.train_dataloader.batch_size
+        steps = epochs * self.train_dataloader.dataset.num_rows//self.train_dataloader.batch_size
         scheduler = get_linear_schedule_with_warmup(
             optimizer, warmup_steps, steps)
         model.to(device)
@@ -119,6 +119,7 @@ class Trainer():
                 # eval step
                 
                 if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
+                    print("evaluating...")
                     model.eval()
                     losses = []
                     for eval_step, eval_batch in enumerate(self.eval_dataloader):
