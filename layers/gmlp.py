@@ -49,7 +49,7 @@ class gMLPBlock(nn.Module):
         self.channel_proj1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
         self.channel_proj2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.sgu = SpatialGatingUnit(config.intermediate_size, config.max_position_embeddings)
-        self.attn = Attention(config.hidden_size, config.intermediate_size, config.attn_dim, config.causal) if config.tinyAtt is not None else None
+        self.attn = Attention(config.hidden_size, config.intermediate_size, config.attn_dim, config.causal) if config.tinyAtt else None
 
     def forward(self, x):
         residual = x

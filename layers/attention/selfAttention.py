@@ -10,15 +10,23 @@ def scaled_dot_product_attention(query: Tensor, key: Tensor, value: Tensor) -> T
     softmax = f.softmax(temp / scale, dim=-1)
     return softmax.bmm(value)
 
+
 class AttentionHead(nn.Module):
-    def __init__(self, dim_in: int, dim_k: int, dim_v: int):
+    def __init__(self, dim_in: int, dim_k: int, dim_v: int, dim_out: int = None):
         super().__init__()
         self.q = nn.Linear(dim_in, dim_k)
         self.k = nn.Linear(dim_in, dim_k)
         self.v = nn.Linear(dim_in, dim_v)
+        if dim_out is not None:
+            self.out = nn.Linear(dim_v, dim_out)
+        else:
+            self.out = None
 
     def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
+        if self.out is not None:
+            return self.out(scaled_dot_product_attention(self.q(query), self.k(key), self.v(value)))
         return scaled_dot_product_attention(self.q(query), self.k(key), self.v(value))
+
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads: int, dim_in: int, dim_k: int, dim_v: int):
@@ -28,7 +36,7 @@ class MultiHeadAttention(nn.Module):
         )
         #self.linear = nn.Linear(num_heads * dim_v, dim_in)
 
-    def forward(self, query: Tensor, key: Tensor=None, value: Tensor=None) -> Tensor:
+    def forward(self, query: Tensor, key: Tensor = None, value: Tensor = None) -> Tensor:
         if key == None:
             key = query
         if value == None:
