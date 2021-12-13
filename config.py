@@ -39,7 +39,8 @@ class LayerConfig():
                 "intermediate_size": self.intermediate_size,
                 "layer_norm_eps": self.layer_norm_eps,
                 "hidden_dropout_prob": self.hidden_dropout_prob,
-                "attention_type":self.attention_type}
+                "attention_type":self.attention_type,
+                "tinyAtt":self.tinyAtt}
 
     def fromDict(self, dict):
         self.hidden_size = dict["hidden_size"]
@@ -48,3 +49,4 @@ class LayerConfig():
         self.layer_norm_eps = dict["layer_norm_eps"]
         self.hidden_dropout_prob = dict["hidden_dropout_prob"]
         self.attention_type = dict["attention_type"]
+        self.tinyAtt = dict["tinyAtt"]
