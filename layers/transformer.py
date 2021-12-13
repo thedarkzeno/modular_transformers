@@ -35,7 +35,7 @@ class TransformerLayer(nn.Module):
 
         self.ff = FeedForward(config)
         self.norm1 = nn.LayerNorm(config.hidden_size)
-        self.norm_res = nn.LayerNorm(config.hidden_size) if config.tinyAtt is not None else None
+        self.norm_res = nn.LayerNorm(config.hidden_size) if config.tinyAtt else None
         self.norm2 = nn.LayerNorm(config.hidden_size)
 
     def forward(self, x):
