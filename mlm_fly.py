@@ -76,14 +76,18 @@ class Trainer():
         batch["labels"] = labels
         return batch
 
-    def prepare_dataset(self, train_file, batch_size, val_file=None):
+    def prepare_dataset(self, train_file, batch_size, val_file=None, lower_case=False):
         self.train_data = load_dataset(
             'text', data_files={'train': train_file})
+        if lower_case:
+            self.train_data = self.train_data.map(lambda data: data["text"].lower(), batched=True)
         self.train_dataloader = DataLoader(
             self.train_data["train"], shuffle=True, batch_size=batch_size
         )
         if val_file is not None:
             self.eval_data = load_dataset("text", data_files={'val': val_file})
+            if lower_case:
+                self.eval_data = self.eval_data.map(lambda data: data["text"].lower(), batched=True)
             self.eval_dataloader = DataLoader(
                 self.eval_data["val"], shuffle=True, batch_size=batch_size
             )
