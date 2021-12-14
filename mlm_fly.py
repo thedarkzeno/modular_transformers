@@ -9,6 +9,8 @@ import torch.nn as nn
 import math
 
 
+
+
 def getIgnoreMask(tokens_tensor, ignore_tokens):
     result = []
     finished = False
@@ -75,17 +77,19 @@ class Trainer():
         return batch
 
     def prepare_dataset(self, train_file, batch_size, val_file=None):
-        self.train_data = load_dataset('text', data_files={'train': train_file})
+        self.train_data = load_dataset(
+            'text', data_files={'train': train_file})
         self.train_dataloader = DataLoader(
             self.train_data["train"], shuffle=True, batch_size=batch_size
         )
         if val_file is not None:
-          self.eval_data = load_dataset("text", data_files={'val': val_file})
-          self.eval_dataloader = DataLoader(
-            self.eval_data["val"], shuffle=True, batch_size=batch_size
-          )
+            self.eval_data = load_dataset("text", data_files={'val': val_file})
+            self.eval_dataloader = DataLoader(
+                self.eval_data["val"], shuffle=True, batch_size=batch_size
+            )
 
-    def fit_mlm(self, model, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.01, eval_steps=1000, device="cpu"):
+    def fit_mlm(self, model, model_name, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999),
+                eps=1e-08, weight_decay=0.01, eval_steps=1000, device="cpu", ckpt_steps=0):
         assert (
             self.train_dataloader is not None), "You need to prepare the dataset first"
         criterion = nn.CrossEntropyLoss(ignore_index=-100)
@@ -97,57 +101,66 @@ class Trainer():
         model.to(device)
 
         # training loop
-        pbar = tqdm(range(epochs), desc="Epochs")
-        for epoch in pbar:
-            perplexity = 0
-            for step, batch in enumerate(self.train_dataloader):
-                model.train()
-                optimizer.zero_grad()
-                batch = self.process_data_to_model_inputs(batch)
-                # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
-                # model(batch['input'].to(device), batch['mask'].to(device))
-                outputs = model(batch['input'].to(device))
-                label = batch['labels'].to(device)
+        # pbar = tqdm(range(epochs), desc="Steps")
+        with tqdm(total=steps, desc="Steps") as pbar:
+            for epoch in epochs:
+                perplexity = 0
+                for step, batch in enumerate(self.train_dataloader):
+                    model.train()
+                    optimizer.zero_grad()
+                    batch = self.process_data_to_model_inputs(batch)
+                    # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
+                    # model(batch['input'].to(device), batch['mask'].to(device))
+                    outputs = model(batch['input'].to(device))
+                    label = batch['labels'].to(device)
 
-                loss = criterion(outputs.transpose(1, 2), label)
+                    loss = criterion(outputs.transpose(1, 2), label)
 
-                # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
+                    # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
 
-                loss.backward()
-                optimizer.step()
-                scheduler.step()
-                # eval step
-                
-                if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
-                    print("evaluating...")
-                    model.eval()
-                    losses = []
-                    for eval_step, eval_batch in enumerate(self.eval_dataloader):
-                        eval_batch = self.process_data_to_model_inputs(eval_batch)
-                        with torch.no_grad():
-                            outputs = model(eval_batch['input'].to(device))
-                        label = batch['labels'].to(device)
-                        loss = criterion(outputs.transpose(1, 2), label)
-                        losses.append(loss)
+                    loss.backward()
+                    optimizer.step()
+                    scheduler.step()
+                    # eval step
 
-                    #losses = torch.cat(losses)
-                    losses = torch.tensor(losses)
-                    losses = losses[: len(self.eval_data)]
-                    try:
-                        perplexity = math.exp(torch.mean(losses))
-                    except OverflowError:
-                        perplexity = float("inf")
-                if perplexity != 0:
-                    log_ = {
-                        'Train Loss': loss,
-                        'Step': step,
-                        'LR': scheduler.get_last_lr()[0],
-                        'perplexity': perplexity
-                    }
-                else:
-                    log_ = {
-                        'Train Loss': loss,
-                        'Step': step,
-                        'LR': scheduler.get_last_lr()[0]
-                    }
-                pbar.set_postfix(log_)
+                    if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
+                        print("evaluating...")
+                        model.eval()
+                        losses = []
+                        for eval_step, eval_batch in enumerate(self.eval_dataloader):
+                            eval_batch = self.process_data_to_model_inputs(
+                                eval_batch)
+                            with torch.no_grad():
+                                outputs = model(eval_batch['input'].to(device))
+                            label = batch['labels'].to(device)
+                            loss = criterion(outputs.transpose(1, 2), label)
+                            losses.append(loss)
+
+                        #losses = torch.cat(losses)
+                        losses = torch.tensor(losses)
+                        losses = losses[: len(self.eval_data)]
+                        try:
+                            perplexity = math.exp(torch.mean(losses))
+                        except OverflowError:
+                            perplexity = float("inf")
+                    if perplexity != 0:
+                        log_ = {
+                            'Train Loss': loss,
+                            'Step': step,
+                            'LR': scheduler.get_last_lr()[0],
+                            'perplexity': perplexity
+                        }
+                    else:
+                        log_ = {
+                            'Train Loss': loss,
+                            'Step': step,
+                            'LR': scheduler.get_last_lr()[0]
+                        }
+                    if ckpt_steps > 0:
+                        if steps>0 and steps%ckpt_steps==0:
+                            #save
+                            model.save_pretrained(model_name+"/ckpt-{}".format(steps))
+
+                    pbar.set_postfix(log_)
+                    pbar.update(1)
+                    
