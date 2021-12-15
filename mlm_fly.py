@@ -97,7 +97,7 @@ class Trainer():
             )
 
     def fit_mlm(self, model, model_name, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999),
-                eps=1e-08, weight_decay=0.01, eval_steps=1000, device="cpu", ckpt_steps=0):
+                eps=1e-08, weight_decay=0.01, eval_steps=1000, device="cpu", ckpt_steps=0, use_amp = False):
         assert (
             self.train_dataloader is not None), "You need to prepare the dataset first"
         criterion = nn.CrossEntropyLoss(ignore_index=-100)
@@ -107,6 +107,7 @@ class Trainer():
         scheduler = get_linear_schedule_with_warmup(
             optimizer, warmup_steps, steps)
         model.to(device)
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
         # training loop
         # pbar = tqdm(range(epochs), desc="Steps")
@@ -115,20 +116,25 @@ class Trainer():
             for epoch in range(epochs):
                 for step, batch in enumerate(self.train_dataloader):
                     model.train()
-                    optimizer.zero_grad()
+                    # optimizer.zero_grad()
                     batch = self.process_data_to_model_inputs(batch)
                     # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
                     # model(batch['input'].to(device), batch['mask'].to(device))
-                    outputs = model(batch['input'].to(device))
                     label = batch['labels'].to(device)
-
-                    loss = criterion(outputs.transpose(1, 2), label)
+                    with torch.cuda.amp.autocast(enabled=use_amp):
+                        outputs = model(batch['input'].to(device))
+                        loss = criterion(outputs.transpose(1, 2), label)
 
                     # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
-
-                    loss.backward()
-                    optimizer.step()
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
                     scheduler.step()
+
+                    # loss.backward()
+                    # optimizer.step()
+                    
                     # eval step
 
                     if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
