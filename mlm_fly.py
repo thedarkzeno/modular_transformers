@@ -111,7 +111,7 @@ class Trainer():
         # training loop
         # pbar = tqdm(range(epochs), desc="Steps")
         with tqdm(total=steps, desc="Steps") as pbar:
-            for epoch in epochs:
+            for epoch in range(epochs):
                 perplexity = 0
                 for step, batch in enumerate(self.train_dataloader):
                     model.train()
