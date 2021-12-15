@@ -111,8 +111,8 @@ class Trainer():
         # training loop
         # pbar = tqdm(range(epochs), desc="Steps")
         with tqdm(total=steps, desc="Steps") as pbar:
+            perplexity = 0
             for epoch in range(epochs):
-                perplexity = 0
                 for step, batch in enumerate(self.train_dataloader):
                     model.train()
                     optimizer.zero_grad()
@@ -165,9 +165,10 @@ class Trainer():
                             'LR': scheduler.get_last_lr()[0]
                         }
                     if ckpt_steps > 0:
-                        if steps>0 and steps%ckpt_steps==0:
+                        if step>0 and step%ckpt_steps==0:
                             #save
-                            model.save_pretrained(model_name+"/ckpt-{}".format(steps))
+                            print("saving checkpoint {}".format(step))
+                            model.save_pretrained(model_name+"/ckpts/{}".format(step))
 
                     pbar.set_postfix(log_)
                     pbar.update(1)
