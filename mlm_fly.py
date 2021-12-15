@@ -9,8 +9,6 @@ import torch.nn as nn
 import math
 
 
-
-
 def getIgnoreMask(tokens_tensor, ignore_tokens):
     result = []
     finished = False
@@ -67,13 +65,13 @@ class Trainer():
         self.eval_dataloader = None
         self.lower = False
 
-    def process_data_to_model_inputs(self, batch):
+    def process_data_to_model_inputs(self, batch, max_length=128):
         if self.lower:
             tokens = torch.tensor(self.tokenizer.batch_encode_plus(
-                [txt.lower() for txt in batch["text"]], padding="max_length", truncation=True, max_length=128)["input_ids"])
+                [txt.lower() for txt in batch["text"]], padding="max_length", truncation=True, max_length=max_length)["input_ids"])
         else:
             tokens = torch.tensor(self.tokenizer.batch_encode_plus(
-                batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
+                batch["text"], padding="max_length", truncation=True, max_length=max_length)["input_ids"])
         inputs, labels, mask = torch_mask_tokens(
             tokens, tokenizer=self.tokenizer)
         batch["input"] = inputs
@@ -91,13 +89,13 @@ class Trainer():
         )
         if val_file is not None:
             self.eval_data = load_dataset("text", data_files={'val': val_file})
-            
+
             self.eval_dataloader = DataLoader(
                 self.eval_data["val"], shuffle=True, batch_size=batch_size
             )
 
     def fit_mlm(self, model, model_name, epochs=1, learning_rate=1e-4, warmup_steps=1000, betas=(0.9, 0.999),
-                eps=1e-08, weight_decay=0.01, eval_steps=1000, device="cpu", ckpt_steps=0, use_amp = False):
+                eps=1e-08, weight_decay=0.01, eval_steps=1000, max_length=128, device="cpu", ckpt_steps=0, use_amp=False):
         assert (
             self.train_dataloader is not None), "You need to prepare the dataset first"
         criterion = nn.CrossEntropyLoss(ignore_index=-100)
@@ -117,7 +115,8 @@ class Trainer():
                 for step, batch in enumerate(self.train_dataloader):
                     model.train()
                     # optimizer.zero_grad()
-                    batch = self.process_data_to_model_inputs(batch)
+                    batch = self.process_data_to_model_inputs(
+                        batch, max_length=max_length)
                     # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
                     # model(batch['input'].to(device), batch['mask'].to(device))
                     label = batch['labels'].to(device)
@@ -134,7 +133,7 @@ class Trainer():
 
                     # loss.backward()
                     # optimizer.step()
-                    
+
                     # eval step
 
                     if self.eval_dataloader is not None and (step+1) % eval_steps == 0:
@@ -143,7 +142,7 @@ class Trainer():
                         losses = []
                         for eval_step, eval_batch in enumerate(self.eval_dataloader):
                             eval_batch = self.process_data_to_model_inputs(
-                                eval_batch)
+                                eval_batch, max_length=max_length)
                             with torch.no_grad():
                                 outputs = model(eval_batch['input'].to(device))
                             label = batch['labels'].to(device)
@@ -171,11 +170,11 @@ class Trainer():
                             'LR': scheduler.get_last_lr()[0]
                         }
                     if ckpt_steps > 0:
-                        if step>0 and step%ckpt_steps==0:
-                            #save
+                        if step > 0 and step % ckpt_steps == 0:
+                            # save
                             print("saving checkpoint {}".format(step))
-                            model.save_pretrained(model_name+"/ckpts/{}".format(step))
+                            model.save_pretrained(
+                                model_name+"/ckpts/{}".format(step))
 
                     pbar.set_postfix(log_)
                     pbar.update(1)
-                    
