@@ -65,10 +65,15 @@ class Trainer():
         self.train_dataloader = None
         self.eval_data = None
         self.eval_dataloader = None
+        self.lower = False
 
     def process_data_to_model_inputs(self, batch):
-        tokens = torch.tensor(self.tokenizer.batch_encode_plus(
-            batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
+        if self.lower:
+            tokens = torch.tensor(self.tokenizer.batch_encode_plus(
+                [txt.lower() for txt in batch["text"]], padding="max_length", truncation=True, max_length=128)["input_ids"])
+        else:
+            tokens = torch.tensor(self.tokenizer.batch_encode_plus(
+                batch["text"], padding="max_length", truncation=True, max_length=128)["input_ids"])
         inputs, labels, mask = torch_mask_tokens(
             tokens, tokenizer=self.tokenizer)
         batch["input"] = inputs
@@ -80,14 +85,13 @@ class Trainer():
         self.train_data = load_dataset(
             'text', data_files={'train': train_file})
         if lower_case:
-            self.train_data = self.train_data.map(lambda data: data["text"].lower(), batched=True)
+            self.lower = True
         self.train_dataloader = DataLoader(
             self.train_data["train"], shuffle=True, batch_size=batch_size
         )
         if val_file is not None:
             self.eval_data = load_dataset("text", data_files={'val': val_file})
-            if lower_case:
-                self.eval_data = self.eval_data.map(lambda data: data["text"].lower(), batched=True)
+            
             self.eval_dataloader = DataLoader(
                 self.eval_data["val"], shuffle=True, batch_size=batch_size
             )
