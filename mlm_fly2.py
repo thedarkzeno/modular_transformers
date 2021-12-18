@@ -121,8 +121,8 @@ class Trainer():
                     # model(batch['input'].to(device), batch['mask'].to(device))
                     label = batch['labels'].to(device)
                     with torch.cuda.amp.autocast(enabled=use_amp):
-                        outputs = model(batch['input'].to(device))[0]
-                        loss = criterion(outputs.transpose(1, 2), label)
+                        loss = model(batch['input'].to(device), labels=label)[0]
+                        # loss = criterion(outputs.transpose(1, 2), label)
 
                     # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
                     scaler.scale(loss).backward()

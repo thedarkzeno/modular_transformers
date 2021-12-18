@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from pathlib import Path
+
+from torch.nn.modules.loss import CrossEntropyLoss
 from .config import Config, LayerConfig
 from .layers import *
 import json
@@ -115,7 +117,12 @@ class ModelForMaskedLM(nn.Module):
             model.load_state_dict(torch.load(path+"/model.bin"))
         return model
 
-    def forward(self, Input, mask=None):
+    def forward(self, Input, mask=None, labels=None):
         x = self.baseModel(Input, mask)
         x = self.output(x)
-        return x
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(x.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return (masked_lm_loss, x) if labels is not None else x

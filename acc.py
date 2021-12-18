@@ -1,26 +1,14 @@
 import torch
 from torch import Tensor
 from typing import Tuple
-from datasets import load_dataset, load_from_disk
+from datasets import load_dataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 from transformers import get_linear_schedule_with_warmup
 import torch.nn as nn
 import math
-
-
-# def getIgnoreMask(tokens_tensor, ignore_tokens):
-#     result = []
-#     finished = False
-#     for v in tokens_tensor:
-#         if finished == False:
-#             result.append(v in ignore_tokens)
-#             if v == 0:  # Once it gets to the padding you don't need to check anymore
-#                 finished = True
-#         else:
-#             result.append(True)
-#     return result
-
+from accelerate import Accelerator
+accelerator = Accelerator(fp16=True)
 
 def torch_mask_tokens(inputs, tokenizer, mlm_probability=0.15):
     """
@@ -28,12 +16,12 @@ def torch_mask_tokens(inputs, tokenizer, mlm_probability=0.15):
     """
     labels = inputs.clone()
     # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
-    probability_matrix = torch.full(labels.shape, mlm_probability)
+    probability_matrix = torch.full(labels.shape, mlm_probability, device=torch.device('cuda:0'))
 
     special_tokens_mask = [
         tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
     ]
-    special_tokens_mask = torch.tensor(special_tokens_mask, dtype=torch.bool)
+    special_tokens_mask = torch.tensor(special_tokens_mask, device=torch.device('cuda:0'), dtype=torch.bool)
 
     probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
     masked_indices = torch.bernoulli(probability_matrix).bool()
@@ -41,15 +29,15 @@ def torch_mask_tokens(inputs, tokenizer, mlm_probability=0.15):
 
     # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
     indices_replaced = torch.bernoulli(torch.full(
-        labels.shape, 0.8)).bool() & masked_indices
+        labels.shape, 0.8, device=torch.device('cuda:0'))).bool() & masked_indices
     # self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
-    inputs[indices_replaced] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+    inputs[indices_replaced] = 103
 
     # 10% of the time, we replace masked input tokens with random word
     indices_random = torch.bernoulli(torch.full(
-        labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        labels.shape, 0.5, device=torch.device('cuda:0'))).bool() & masked_indices & ~indices_replaced
     random_words = torch.randint(
-        len(tokenizer), labels.shape, dtype=torch.long)
+        len(tokenizer), labels.shape, device=torch.device('cuda:0'), dtype=torch.long)
     inputs[indices_random] = random_words[indices_random]
 
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
@@ -121,8 +109,8 @@ class Trainer():
         scheduler = get_linear_schedule_with_warmup(
             optimizer, warmup_steps, steps)
         model.to(device)
-        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
         
+        model, optimizer, self.train_dataloader = accelerator.prepare(model, optimizer, self.train_dataloader)
         # training loop
         # pbar = tqdm(range(epochs), desc="Steps")
         with tqdm(total=steps, desc="Steps") as pbar:
@@ -131,29 +119,19 @@ class Trainer():
             for epoch in range(epochs):
                 for step, batch in enumerate(self.train_dataloader):
                     
-                    
-                    # optimizer.zero_grad()
-                    # batch.set_format(type='torch', columns=['input', 'labels', 'mask'])
-                    # model(batch['input'].to(device), batch['mask'].to(device))
+                
                     inputs, labels, mask = torch_mask_tokens(
                         batch['input'], tokenizer=self.tokenizer)
-                    label = labels.to(device)
-                    with torch.cuda.amp.autocast(enabled=use_amp):
-                        loss = model(inputs.to(device), mask=mask, labels=label)[0]
-                        loss = loss / accumulation_steps
-                        # loss = criterion(outputs.transpose(1, 2), label)
 
-                    # accuracy = jnp.equal(jnp.argmax(logits, axis=-1), label) * label_mask
-                    scaler.scale(loss).backward()
+                    loss = model(inputs, mask=mask, labels=labels)[0]
+                    loss = loss / accumulation_steps
+
+                    accelerator.backward(loss)
                     
                     if (step+1) % accumulation_steps == 0:             # Wait for several backward steps
-                        scaler.step(optimizer)
-                        scaler.update()
-                                                 # Now we can do an optimizer step
+                        optimizer.step()
                         optimizer.zero_grad(set_to_none=True)
                     scheduler.step()   
-                    # loss.backward()
-                    # optimizer.step()
 
                     # eval step
 
