@@ -30,6 +30,7 @@ class Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.layers_attention_type = layers_attention_type
+        self.num_hidden_layers = len(self.layers_attention_type)
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
