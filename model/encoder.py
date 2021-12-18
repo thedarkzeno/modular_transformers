@@ -107,7 +107,7 @@ class ModelLayer(nn.Module):
             self_attention_outputs = self.attention(
                 hidden_states
             )
-            attention_output = self_attention_outputs
+            
         else:
             self_attention_outputs = self.attention(
                 hidden_states,
@@ -116,7 +116,7 @@ class ModelLayer(nn.Module):
                 output_attentions=output_attentions,
                 past_key_value=self_attn_past_key_value,
             )
-            attention_output = self_attention_outputs[0]
+        attention_output = self_attention_outputs[0]
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
