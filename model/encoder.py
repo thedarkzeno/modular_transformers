@@ -1,8 +1,9 @@
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from transformers.models.bert.modeling_bert import BertEmbeddings as ModelEmbeddings, BertIntermediate as ModelIntermediate, BertOutput as ModelOutput, BertPreTrainedModel as PreTrainedModel, BertPooler as ModelPooler, BertOnlyMLMHead as ModelOnlyMLMHead, BertSelfOutput as ModelSelfOutput
+from transformers.models.bert.modeling_bert import *
 from transformers.modeling_utils import (
+    PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -20,7 +21,7 @@ class Attention(nn.Module):
         super().__init__()
         self.self = SelfAttention(
             config, position_embedding_type=position_embedding_type)
-        self.output = ModelSelfOutput(config)
+        self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -75,19 +76,17 @@ class ModelLayer(nn.Module):
         self.seq_len_dim = 1
         self.attention_type = attention_type
         if attention_type == "fourier":
-            self.attention = fourier_transform  # SelfAttention(config)
+          self.attention = fourier_transform#BertAttention(config)
         else:
-            self.attention = Attention(config)
+          self.attention = Attention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
-                raise ValueError(
-                    f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = Attention(
-                config, position_embedding_type="absolute")
-        self.intermediate = ModelIntermediate(config)
-        self.output = ModelOutput(config)
+                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+            self.crossattention = Attention(config, position_embedding_type="absolute")
+        self.intermediate = BertIntermediate(config)
+        self.output = BertOutput(config)
 
     def forward(
         self,
@@ -100,20 +99,19 @@ class ModelLayer(nn.Module):
         output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:
-                                                  2] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         if self.attention_type == "fourier":
-            self_attention_outputs = self.attention(
-                hidden_states
-            )
-        else:
-            self_attention_outputs = self.attention(
-                hidden_states,
-                attention_mask,
-                head_mask,
-                output_attentions=output_attentions,
-                past_key_value=self_attn_past_key_value,
-            )
+          self_attention_outputs = self.attention(
+              hidden_states
+          )
+        else: 
+          self_attention_outputs = self.attention(
+              hidden_states,
+              attention_mask,
+              head_mask,
+              output_attentions=output_attentions,
+              past_key_value=self_attn_past_key_value,
+          )
         attention_output = self_attention_outputs[0]
 
         # if decoder, the last output is tuple of self-attn cache
@@ -121,8 +119,7 @@ class ModelLayer(nn.Module):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            # add self attentions if we output attention weights
-            outputs = self_attention_outputs[1:]
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -132,8 +129,7 @@ class ModelLayer(nn.Module):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:
-                                                       ] if past_key_value is not None else None
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -144,8 +140,7 @@ class ModelLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            # add cross attentions if we output attention weights
-            outputs = outputs + cross_attention_outputs[1:-1]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
@@ -172,8 +167,7 @@ class ModelEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [ModelLayer(config, attention) for attention in config.layers_attention_type])
+        self.layer = nn.ModuleList([ModelLayer(config, attention) for attention in config.layers_attention_type])
         self.gradient_checkpointing = False
 
     def forward(
@@ -204,6 +198,9 @@ class ModelEncoder(nn.Module):
             if self.gradient_checkpointing and self.training:
 
                 if use_cache:
+                    logger.warning(
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -237,8 +234,7 @@ class ModelEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + \
-                        (layer_outputs[2],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -263,16 +259,47 @@ class ModelEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
+# class ModularPreTrainedModel(PreTrainedModel):
+#     """
+#     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+#     models.
+#     """
 
-class Model(PreTrainedModel):
+#     config_class = Config
+#     load_tf_weights = load_tf_weights_in_bert
+#     base_model_prefix = "modular"
+#     supports_gradient_checkpointing = True
+#     _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+#     def _init_weights(self, module):
+#         """Initialize the weights"""
+#         if isinstance(module, nn.Linear):
+#             # Slightly different from the TF version which uses truncated_normal for initialization
+#             # cf https://github.com/pytorch/pytorch/pull/5617
+#             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+#             if module.bias is not None:
+#                 module.bias.data.zero_()
+#         elif isinstance(module, nn.Embedding):
+#             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+#             if module.padding_idx is not None:
+#                 module.weight.data[module.padding_idx].zero_()
+#         elif isinstance(module, nn.LayerNorm):
+#             module.bias.data.zero_()
+#             module.weight.data.fill_(1.0)
+
+#     def _set_gradient_checkpointing(self, module, value=False):
+#         if isinstance(module, ModelEncoder):
+#             module.gradient_checkpointing = value
+
+class Model(BertPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ModelEmbeddings(config)
+        self.embeddings = BertEmbeddings(config)
         self.encoder = ModelEncoder(config)
 
-        self.pooler = ModelPooler(config) if add_pooling_layer else None
+        self.pooler = BertPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -290,6 +317,7 @@ class Model(PreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
+
 
     def forward(
         self,
@@ -320,15 +348,13 @@ class Model(PreTrainedModel):
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            raise ValueError(
-                "You have to specify either input_ids or inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -337,35 +363,28 @@ class Model(PreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(
-                ((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(
-                    batch_size, seq_length)
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
-                token_type_ids = torch.zeros(
-                    input_shape, dtype=torch.long, device=device)
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (
-                encoder_batch_size, encoder_sequence_length)
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(
-                    encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(
-                encoder_attention_mask)
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -374,8 +393,7 @@ class Model(PreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(
-            head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -397,8 +415,7 @@ class Model(PreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(
-            sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -413,17 +430,22 @@ class Model(PreTrainedModel):
         )
 
 
-class ModelForMaskedLM(PreTrainedModel):
+class ModelForMaskedLM(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [
-        r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.base = Model(config, add_pooling_layer=False)
-        self.cls = ModelOnlyMLMHead(config)
+        if config.is_decoder:
+            logger.warning(
+                "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "
+                "bi-directional self-attention."
+            )
+
+        self.bert = Model(config, add_pooling_layer=False)
+        self.cls = BertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -433,6 +455,7 @@ class ModelForMaskedLM(PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
+
 
     def forward(
         self,
@@ -458,7 +481,7 @@ class ModelForMaskedLM(PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.base(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -478,8 +501,7 @@ class ModelForMaskedLM(PreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(
-                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -500,8 +522,7 @@ class ModelForMaskedLM(PreTrainedModel):
         if self.config.pad_token_id is None:
             raise ValueError("The PAD token should be defined for generation")
 
-        attention_mask = torch.cat(
-            [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
@@ -510,7 +531,7 @@ class ModelForMaskedLM(PreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
-class ModelForTokenClassification(PreTrainedModel):
+class ModelForTokenClassification(BertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
