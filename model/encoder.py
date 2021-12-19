@@ -85,7 +85,7 @@ class ModelLayer(nn.Module):
         self.use_tiny_attention=config.use_tiny_attention
 
         self.tiny_attention = AttentionHead(config.hidden_size, config.tiny_dim, config.tiny_dim, config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
-        self.norm_res = nn.LayerNorm(config.hidden_size) if self.tiny_attention is not None else None
+        self.norm_res = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if self.tiny_attention is not None else None
 
         if self.add_cross_attention:
             if not self.is_decoder:
