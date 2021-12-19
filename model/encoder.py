@@ -13,7 +13,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     TokenClassifierOutput)
-from .attention import SelfAttention, fourier_transform
+from .attention import SelfAttention, fourier_transform, AttentionHead
 
 
 class Attention(nn.Module):
@@ -81,6 +81,11 @@ class ModelLayer(nn.Module):
             self.attention = Attention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
+        self.use_tiny_attention=config.use_tiny_attention
+
+        self.tiny_attention = AttentionHead(config.hidden_size, config.tiny_dim, config.tiny_dim, config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
+        self.norm_res = nn.LayerNorm(config.hidden_size) if self.tiny_attention is not None else None
+
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(
@@ -117,6 +122,10 @@ class ModelLayer(nn.Module):
                 past_key_value=self_attn_past_key_value,
             )
         attention_output = self_attention_outputs[0]
+
+        if self.tiny_attention is not None:
+            att_res = self.tiny_attention(hidden_states, hidden_states, hidden_states)
+            attention_output = self.norm_res(attention_output + att_res)
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:

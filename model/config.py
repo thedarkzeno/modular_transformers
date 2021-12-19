@@ -23,6 +23,8 @@ class Config(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        use_tiny_attention=False,
+        tiny_dim=64,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -43,3 +45,6 @@ class Config(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        #tiny attention option
+        self.use_tiny_attention=use_tiny_attention
+        self.tiny_dim=tiny_dim
