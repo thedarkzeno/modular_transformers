@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 import torch.nn as nn
-import torch.functional as f
+import torch.nn.functional as f
 import math
 
 class SelfAttention(nn.Module):
