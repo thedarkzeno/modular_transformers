@@ -84,7 +84,7 @@ class FlaxModelLayer(nn.Module):
                 deterministic=deterministic,
                 output_attentions=output_attentions,
             )
-            attention_output = attention_outputs[0]
+        attention_output = attention_outputs[0]
 
         hidden_states = self.intermediate(attention_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
