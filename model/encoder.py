@@ -4,11 +4,12 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from .config import Config
 from transformers.models.bert.modeling_bert import *
 from transformers.modeling_utils import (
-    PreTrainedModel,
+    #PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from .modeling_utils import PreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
