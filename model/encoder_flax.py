@@ -75,7 +75,7 @@ class FlaxModelLayer(nn.Module):
         output_attentions: bool = False,
     ):
         if self.attention_type == "fourier":
-            attention_outputs = self.attention(hidden_states)
+            attention_outputs = jax.vmap(jnp.fft.fftn)(hidden_states).real #self.attention(hidden_states)
         else:
             attention_outputs = self.attention(
                 hidden_states,
