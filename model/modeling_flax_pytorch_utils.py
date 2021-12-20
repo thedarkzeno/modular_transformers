@@ -1,4 +1,5 @@
 from transformers.modeling_flax_pytorch_utils import *
+import modular_transformers
 
 def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
     """Load flax checkpoints in a PyTorch model"""

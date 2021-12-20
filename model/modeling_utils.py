@@ -1,4 +1,5 @@
 from transformers.modeling_utils import *
+_init_weights = True
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
     r"""
