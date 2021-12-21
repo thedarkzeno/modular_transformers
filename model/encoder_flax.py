@@ -28,7 +28,7 @@ class FlaxAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        layer_head_mask,
+        layer_head_mask=None,
         deterministic=True,
         output_attentions: bool = False,
     ):

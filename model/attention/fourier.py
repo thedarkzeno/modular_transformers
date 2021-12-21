@@ -1,4 +1,5 @@
 import torch
+import torch.fft
 
 def fourier_transform(x):
     attention_output = torch.fft.fft(torch.fft.fft(x, dim=-1), dim=-2).real

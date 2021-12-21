@@ -1,3 +1,6 @@
 from .config import *
-from .encoder import *
-from .encoder_flax import *
+from .file_utils import is_torch_available, is_flax_available
+if is_torch_available():
+    from .encoder import *
+if is_flax_available():
+    from .encoder_flax import *
