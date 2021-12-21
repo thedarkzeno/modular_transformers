@@ -16,12 +16,97 @@ from transformers.models.bert.modeling_flax_bert import *
 from .config import Config
 from .attention import Fourier_transform_flax
 
+class FlaxModelSelfAttention(nn.Module):
+    config: Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
+            raise ValueError(
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`\
+                    : {self.config.num_attention_heads}"
+            )
+
+        self.query = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.key = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.value = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask,
+        layer_head_mask,
+        deterministic=True,
+        output_attentions: bool = False,
+    ):
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+
+        query_states = self.query(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        value_states = self.value(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        key_states = self.key(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+
+        # Convert the boolean attention mask to an attention bias.
+        if attention_mask is not None:
+            # attention mask in the form of attention bias
+            attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
+            attention_bias = lax.select(
+                attention_mask > 0,
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+            )
+        else:
+            attention_bias = None
+
+        dropout_rng = None
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
+            dropout_rng = self.make_rng("dropout")
+
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = jnp.einsum("...hqk,h->...hqk", attn_weights, layer_head_mask)
+
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
+
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
 class FlaxAttention(nn.Module):
     config: Config
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.self = FlaxBertSelfAttention(self.config, dtype=self.dtype)
+        self.self = FlaxModelSelfAttention(self.config, dtype=self.dtype)
         self.output = FlaxBertSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(
