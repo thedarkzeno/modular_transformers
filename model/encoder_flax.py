@@ -15,6 +15,7 @@ from transformers.models.bert.modeling_flax_bert import *
 
 from .config import Config
 from .attention import Fourier_transform_flax
+from .attention.flax_self_attention import FlaxAttentionHead
 
 class FlaxModelSelfAttention(nn.Module):
     config: Config
@@ -151,6 +152,10 @@ class FlaxModelLayer(nn.Module):
         self.intermediate = FlaxBertIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxBertOutput(self.config, dtype=self.dtype)
 
+        self.tiny_attention = FlaxAttentionHead(self.config.hidden_size, self.config.tiny_dim, self.config.tiny_dim, self.config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
+        self.norm_res = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps) if self.tiny_attention is not None else None
+
+
     def __call__(
         self,
         hidden_states,
@@ -170,6 +175,10 @@ class FlaxModelLayer(nn.Module):
                 output_attentions=output_attentions,
             )
         attention_output = attention_outputs[0]
+
+        if self.tiny_attention is not None:
+            att_res = self.tiny_attention(hidden_states)
+            attention_output = self.norm_res(attention_output + att_res)
 
         hidden_states = self.intermediate(attention_output)
         hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
