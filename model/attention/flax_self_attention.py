@@ -30,9 +30,9 @@ class FlaxAttentionHead(nn.Module):
         hidden_states,
     ):
 
-        query_states = self.query(hidden_states)
-        value_states = self.value(hidden_states)
-        key_states = self.key(hidden_states)
+        query_states = self.q(hidden_states)
+        value_states = self.v(hidden_states)
+        key_states = self.k(hidden_states)
 
         attention_bias = None
 
@@ -53,5 +53,8 @@ class FlaxAttentionHead(nn.Module):
         attn_output = jnp.einsum(
             "...hqk,...khd->...qhd", attn_weights, value_states)
         attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
+
+        if self.out is not None:
+            attn_output = self.out(attn_output)
 
         return (attn_output,)
