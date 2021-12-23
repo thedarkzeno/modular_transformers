@@ -102,6 +102,80 @@ class FlaxModelSelfAttention(nn.Module):
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
+
+class FlaxModelTinyAttention(nn.Module):
+    config: Config
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        #, self.config.tiny_dim, self.config.tiny_dim, self.config.hidden_size
+        self.q = nn.Dense(
+            self.config.tiny_dim,
+            dtype=self.dtype,
+            #kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.k = nn.Dense(
+            self.config.tiny_dim,
+            dtype=self.dtype,
+            #kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.v = nn.Dense(
+            self.config.tiny_dim,
+            dtype=self.dtype,
+            #kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.out = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            #kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+
+    def __call__(
+        self,
+        hidden_states,
+        deterministic=True,
+        output_attentions: bool = False,
+    ):
+        head_dim = self.config.tiny_dim // 1
+        #print(hidden_states.shape[:2] + (1, head_dim))
+
+        query_states = self.q(hidden_states).reshape(
+            hidden_states.shape[:2] + (1, head_dim)
+        )
+        value_states = self.v(hidden_states).reshape(
+            hidden_states.shape[:2] + (1, head_dim)
+        )
+        key_states = self.k(hidden_states).reshape(
+            hidden_states.shape[:2] + (1, head_dim)
+        )
+
+        
+        attention_bias = None
+
+        dropout_rng = None
+        
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
+
+        
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
+
+        attn_output = self.out(attn_output)
+
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        return outputs
+
+
 class FlaxAttention(nn.Module):
     config: Config
     dtype: jnp.dtype = jnp.float32
@@ -153,8 +227,8 @@ class FlaxModelLayer(nn.Module):
         self.output = FlaxBertOutput(self.config, dtype=self.dtype)
 
         self.use_tiny_attention=self.config.use_tiny_attention
-        self.tiny_attention = FlaxAttentionHead(self.config.tiny_dim, self.config.tiny_dim, self.config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
-        self.norm_res = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps) if self.tiny_attention is not None else None
+        self.tiny_attention = FlaxModelTinyAttention(self.config) if self.use_tiny_attention and self.attention_type != "self-attention" else None
+        self.norm_res = nn.LayerNorm(epsilon=self.config.layer_norm_eps) if self.tiny_attention is not None else None
 
 
     def __call__(
@@ -178,7 +252,7 @@ class FlaxModelLayer(nn.Module):
         attention_output = attention_outputs[0]
 
         if self.tiny_attention is not None:
-            att_res = self.tiny_attention(hidden_states)
+            att_res = self.tiny_attention(hidden_states)[0]
             attention_output = self.norm_res(attention_output + att_res)
 
         hidden_states = self.intermediate(attention_output)
