@@ -1,6 +1,75 @@
 from transformers.modeling_flax_pytorch_utils import *
 import modular_transformers
 
+def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_path, allow_missing_keys=False):
+    """Load pytorch checkpoints in a flax model"""
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        logger.error(
+            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see "
+            "https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation instructions."
+        )
+        raise
+
+    pt_path = os.path.abspath(pytorch_checkpoint_path)
+    logger.info(f"Loading PyTorch weights from {pt_path}")
+
+    pt_state_dict = torch.load(pt_path, map_location="cpu")
+    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
+
+    flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
+
+    return flax_state_dict
+
+def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
+    # convert pytorch tensor to numpy
+    pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+
+    model_prefix = flax_model.base_model_prefix
+    random_flax_state_dict = flatten_dict(flax_model.params)
+    flax_state_dict = {}
+
+    load_model_with_head_into_base_model = (model_prefix not in flax_model.params) and (
+        model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
+    )
+    load_base_model_into_model_with_head = (model_prefix in flax_model.params) and (
+        model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
+    )
+
+    # Need to change some parameters name to match Flax names
+    for pt_key, pt_tensor in pt_state_dict.items():
+
+        pt_tuple_key = tuple(pt_key.split("."))
+
+        # remove base model prefix if necessary
+        has_base_model_prefix = pt_tuple_key[0] == model_prefix
+        if load_model_with_head_into_base_model and has_base_model_prefix:
+            pt_tuple_key = pt_tuple_key[1:]
+
+        # Correctly rename weight parameters
+        flax_key, flax_tensor = rename_key_and_reshape_tensor(
+            pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix
+        )
+
+        # add model prefix if necessary
+        require_base_model_prefix = (model_prefix,) + flax_key in random_flax_state_dict
+        if load_base_model_into_model_with_head and require_base_model_prefix:
+            flax_key = (model_prefix,) + flax_key
+
+        if flax_key in random_flax_state_dict:
+            if flax_tensor.shape != random_flax_state_dict[flax_key].shape:
+                raise ValueError(
+                    f"PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape "
+                    f"{random_flax_state_dict[flax_key].shape}, but is {flax_tensor.shape}."
+                )
+
+        # also add unexpected weight so that warning is thrown
+        flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+
+    return unflatten_dict(flax_state_dict)
+
+    
 def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
     """Load flax checkpoints in a PyTorch model"""
     flax_checkpoint_path = os.path.abspath(flax_checkpoint_path)

@@ -152,6 +152,7 @@ class FlaxModelLayer(nn.Module):
         self.intermediate = FlaxBertIntermediate(self.config, dtype=self.dtype)
         self.output = FlaxBertOutput(self.config, dtype=self.dtype)
 
+        self.use_tiny_attention=self.config.use_tiny_attention
         self.tiny_attention = FlaxAttentionHead(self.config.hidden_size, self.config.tiny_dim, self.config.tiny_dim, self.config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
         self.norm_res = nn.LayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps) if self.tiny_attention is not None else None
 
