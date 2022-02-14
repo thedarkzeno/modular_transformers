@@ -1,10 +1,10 @@
 from torch import nn
 
 class SpatialGatingUnit(nn.Module):
-    def __init__(self, config):
+    def __init__(self, d_ffn, seq_len):
         super().__init__()
-        self.norm = nn.LayerNorm(config.intermediate_size)
-        self.spatial_proj = nn.Conv1d(config.max_position_embeddings, config.max_position_embeddings, kernel_size=1)
+        self.norm = nn.LayerNorm(d_ffn)
+        self.spatial_proj = nn.Conv1d(seq_len, seq_len, kernel_size=1)
         nn.init.constant_(self.spatial_proj.bias, 1.0)
 
     def forward(self, x, gate_res = None):

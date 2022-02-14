@@ -1,10 +1,14 @@
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+# from modular_transformers.model.attention.lmu import LMUFFT
+
+from .attention.spacial_gating_unit import SpatialGatingUnit
 from .config import Config
 from transformers.models.bert.modeling_bert import *
 from transformers.modeling_utils import (
-    #PreTrainedModel,
+    # PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -15,7 +19,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     TokenClassifierOutput)
-from .attention import SelfAttention, fourier_transform, AttentionHead
+from .attention import SelfAttention, fourier_transform, AttentionHead, LMUFFT
 
 
 class Attention(nn.Module):
@@ -74,19 +78,32 @@ class Attention(nn.Module):
 class ModelLayer(nn.Module):
     def __init__(self, config, attention_type):
         super().__init__()
+        
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention_type = attention_type
         if attention_type == "fourier":
             self.attention = fourier_transform  # BertAttention(config)
+        elif attention_type == "lmu":
+            self.attention = LMUFFT(
+                input_size=config.hidden_size,
+                hidden_size=config.hidden_size,
+                memory_size=config.max_position_embeddings,
+                seq_len=config.max_position_embeddings,
+                theta=config.max_position_embeddings
+            )
+        elif attention_type == "sgu" or attention_type == "spacial_gating_unit":
+            self.attention = SpatialGatingUnit(config)
         else:
             self.attention = Attention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
-        self.use_tiny_attention=config.use_tiny_attention
+        self.use_tiny_attention = config.use_tiny_attention
 
-        self.tiny_attention = AttentionHead(config.hidden_size, config.tiny_dim, config.tiny_dim, config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
-        self.norm_res = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if self.tiny_attention is not None else None
+        self.tiny_attention = AttentionHead(config.hidden_size, config.tiny_dim, config.tiny_dim,
+                                            config.hidden_size) if self.use_tiny_attention and self.attention_type != "self-attention" else None
+        self.norm_res = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps) if self.tiny_attention is not None else None
 
         if self.add_cross_attention:
             if not self.is_decoder:
@@ -114,7 +131,9 @@ class ModelLayer(nn.Module):
             self_attention_outputs = self.attention(
                 hidden_states
             )
-            
+        elif self.attention_type == "lmu":
+            self_attention_outputs = self.attention(hidden_states)
+
         else:
             self_attention_outputs = self.attention(
                 hidden_states,
@@ -126,7 +145,8 @@ class ModelLayer(nn.Module):
         attention_output = self_attention_outputs[0]
 
         if self.tiny_attention is not None:
-            att_res = self.tiny_attention(hidden_states, hidden_states, hidden_states)
+            att_res = self.tiny_attention(
+                hidden_states, hidden_states, hidden_states)
             attention_output = self.norm_res(attention_output + att_res)
 
         # if decoder, the last output is tuple of self-attn cache
@@ -163,11 +183,12 @@ class ModelLayer(nn.Module):
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
-
+        
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
+
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
@@ -279,6 +300,7 @@ class ModelEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
+
 class BertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -296,11 +318,13 @@ class BertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(
+                mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(
+                mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
