@@ -276,8 +276,10 @@ class LMUFFT(nn.Module):
 
         H = []
         A_i = torch.eye(self.memory_size)
-        print("A_i:", A_i.get_device())
-        print("self.B:", self.B.get_device())
+        if self.B.get_device() != A_i.get_device():
+            A_i = A_i.to("cuda")
+        # print("A_i:", A_i.get_device())
+        # print("self.B:", self.B.get_device())
         for t in range(seq_len):
             H.append(A_i @ self.B)
             A_i = self.A @ A_i
