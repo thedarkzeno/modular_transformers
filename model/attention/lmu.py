@@ -235,7 +235,8 @@ class LMUFFT(nn.Module):
         self.W_h = nn.Linear(in_features = memory_size + input_size, out_features = hidden_size)
         self.f_h = nn.ReLU()
 
-        self.A_i = torch.eye(self.memory_size)
+        A_i = torch.eye(self.memory_size)
+        self.register_buffer("A_i", A_i)
 
         A, B = self.stateSpaceMatrices()
         self.register_buffer("A", A) # [memory_size, memory_size]
