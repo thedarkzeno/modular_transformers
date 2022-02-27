@@ -235,6 +235,8 @@ class LMUFFT(nn.Module):
         self.W_h = nn.Linear(in_features = memory_size + input_size, out_features = hidden_size)
         self.f_h = nn.ReLU()
 
+        self.A_i = torch.eye(self.memory_size)
+
         A, B = self.stateSpaceMatrices()
         self.register_buffer("A", A) # [memory_size, memory_size]
         self.register_buffer("B", B) # [memory_size, 1]
@@ -275,11 +277,12 @@ class LMUFFT(nn.Module):
         """ Returns the matrices H and the 1D Fourier transform of H (Equations 23, 26 of the paper) """
 
         H = []
-        A_i = torch.eye(self.memory_size)
-        if self.B.get_device() != A_i.get_device():
-            A_i = A_i.to("cuda")
+        # A_i = torch.eye(self.memory_size)
+        # if self.B.get_device() != A_i.get_device():
+        #     A_i = A_i.to("cuda")
         # print("A_i:", A_i.get_device())
         # print("self.B:", self.B.get_device())
+        A_i = self.A_i.clone()
         for t in range(seq_len):
             H.append(A_i @ self.B)
             A_i = self.A @ A_i
