@@ -249,6 +249,8 @@ class FlaxModelLayer(nn.Module):
     ):
         if self.attention_type == "fourier":
             attention_outputs = self.attention(hidden_states)
+        elif self.attention_type == "lmu":
+            attention_outputs = self.attention(hidden_states)
         else:
             attention_outputs = self.attention(
                 hidden_states,
