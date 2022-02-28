@@ -222,7 +222,7 @@ class FlaxModelLayer(nn.Module):
             self.attention = Fourier_transform_flax()  # BertAttention(config)
         elif self.attention_type == "lmu":
             self.attention = FlaxLMUFFT(
-                input_size=self.config.hidden_size,
+                # input_size=self.config.hidden_size,
                 hidden_size=self.config.hidden_size,
                 memory_size=self.config.max_position_embeddings,
                 seq_len=self.config.max_position_embeddings,
