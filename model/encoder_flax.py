@@ -14,7 +14,7 @@ from jax import lax
 from transformers.models.bert.modeling_flax_bert import *
 
 from .config import Config
-from .attention import Fourier_transform_flax
+from .attention import Fourier_transform_flax, LMUFFT
 from .attention.flax_self_attention import FlaxAttentionHead
 
 class FlaxModelSelfAttention(nn.Module):
@@ -220,6 +220,14 @@ class FlaxModelLayer(nn.Module):
     def setup(self):
         if self.attention_type == "fourier":
             self.attention = Fourier_transform_flax()  # BertAttention(config)
+        elif self.attention_type == "lmu":
+            self.attention = LMUFFT(
+                input_size=self.config.hidden_size,
+                hidden_size=self.config.hidden_size,
+                memory_size=self.config.max_position_embeddings,
+                seq_len=self.config.max_position_embeddings,
+                theta=self.config.max_position_embeddings
+            )
         else:
             self.attention = FlaxAttention(self.config, dtype=self.dtype)
         # self.attention = FlaxAttention(self.config, dtype=self.dtype)

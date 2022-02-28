@@ -5,3 +5,4 @@ if is_torch_available():
     from .lmu import LMUFFT
 if is_flax_available():
     from .fourier_flax import Fourier_transform_flax
+    from .lmu_flax import FlaxLMUFFT

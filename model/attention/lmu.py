@@ -256,7 +256,9 @@ class LMUFFT(nn.Module):
 
         # Continuous
         A = R * np.where(i < j, -1, (-1.0)**(i - j + 1))
+        # print(A.shape)
         B = R * ((-1.0)**Q)
+        # print(B.shape)
         C = np.ones((1, self.memory_size))
         D = np.zeros((1,))
 
@@ -352,19 +354,19 @@ if __name__ == "__main__":
     t2 = time()
     print(t2-t1)
 
-    t1 = time()
-    x = torch.rand(16, 256, 512) # [batch_size, seq_len, input_size]
-    for i in range(10):
-        output, h_n = model(x)
-    t2 = time()
-    print(t2-t1)
+    # t1 = time()
+    # x = torch.rand(16, 256, 512) # [batch_size, seq_len, input_size]
+    # for i in range(10):
+    #     output, h_n = model(x)
+    # t2 = time()
+    # print(t2-t1)
 
-    t1 = time()
-    x = torch.rand(16, 512, 512) # [batch_size, seq_len, input_size]
-    for i in range(10):
-        output, h_n = model(x)
-    t2 = time()
-    print(t2-t1)
+    # t1 = time()
+    # x = torch.rand(16, 512, 512) # [batch_size, seq_len, input_size]
+    # for i in range(10):
+    #     output, h_n = model(x)
+    # t2 = time()
+    # print(t2-t1)
 
     # print(output)
     # print(output.shape)
