@@ -2,6 +2,14 @@ from scipy.signal import cont2discrete
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from jax import jit
+from functools import partial
+
+# @partial(jit, static_argnums=[1,2])
+# def jrfft(x, n, axis):
+#     return jax.jit(jnp.fft.rfft)(x, n=n, axis=axis)
+jrfft = jit(lambda x: jnp.fft.rfft(x, n=1024, axis=-1))
+jirfft = jit(lambda x: jnp.fft.irfft(x, n=1024, axis=-1))
 
 class FlaxLMUFFT(nn.Module):
     hidden_size: int
@@ -57,7 +65,8 @@ class FlaxLMUFFT(nn.Module):
 
         H = jnp.concatenate(H, axis = -1) # [memory_size, seq_len]
         # fft_H = fft.rfft(H, n = 2*seq_len, dim = -1) # [memory_size, seq_len + 1]
-        fft_H = jnp.fft.rfft(H, n = 2*seq_len, axis = -1)
+        fft_H = jrfft(H)
+        
 
         return H, fft_H
 
@@ -65,6 +74,7 @@ class FlaxLMUFFT(nn.Module):
         self,
         x,
     ):
+        # print(x.shape)
         batch_size, seq_len, input_size = x.shape
 
         # Equation 18 of the paper
@@ -73,14 +83,17 @@ class FlaxLMUFFT(nn.Module):
         # Equation 26 of the paper
         fft_input = jnp.transpose(u, axes=[0, 2, 1]) #u.permute(0, 2, 1) # [batch_size, 1, seq_len]
         # fft_u = fft.rfft(fft_input, n = 2*seq_len, dim = -1) # [batch_size, seq_len, seq_len+1]
-        fft_u = jnp.fft.rfft(fft_input, n = 2*seq_len, axis = -1)
+        
+
+        fft_u = jrfft(fft_input)
         # Element-wise multiplication (uses broadcasting)
         # [batch_size, 1, seq_len+1] * [1, memory_size, seq_len+1]
         H, fft_H = self.impulse(seq_len=seq_len)
         temp = fft_u * jnp.expand_dims(fft_H, axis=0) # [batch_size, memory_size, seq_len+1]
 
         # m = fft.irfft(temp, n = 2*seq_len, dim = -1) # [batch_size, memory_size, seq_len+1]
-        m = jnp.fft.irfft(temp, n = 2*seq_len, axis = -1)
+        # m = jax.jit(jnp.fft.irfft)(temp, n = 2*seq_len, axis = -1)
+        m = jirfft(temp)
         m = m[:, :, :seq_len] # [batch_size, memory_size, seq_len]
         m = jnp.transpose(m, axes=[0, 2, 1])#m.permute(0, 2, 1) # [batch_size, seq_len, memory_size]
 
