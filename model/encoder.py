@@ -19,7 +19,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     TokenClassifierOutput)
-from .attention import SelfAttention, fourier_transform, AttentionHead, LMUFFT
+from .attention import SelfAttention, fourier_transform, inverse_fourier_transform, AttentionHead, LMUFFT
 
 
 class Attention(nn.Module):
@@ -84,6 +84,7 @@ class ModelLayer(nn.Module):
         self.attention_type = attention_type
         if attention_type == "fourier":
             self.attention = fourier_transform  # BertAttention(config)
+            self.inverse = inverse_fourier_transform
         elif attention_type == "lmu":
             self.attention = LMUFFT(
                 input_size=config.hidden_size,
@@ -113,6 +114,10 @@ class ModelLayer(nn.Module):
                 config, position_embedding_type="absolute")
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)
+        
+        self.intermediate2 = BertIntermediate(config)
+        self.output2 = BertOutput(config)
+
 
     def forward(
         self,
@@ -187,8 +192,17 @@ class ModelLayer(nn.Module):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
+        
 
+        if self.attention_type == "fourier":
+            inverse_self_attention_outputs = self.inverse(
+                layer_output
+            )
+            layer_output = apply_chunking_to_forward(
+            self.feed_forward_chunk_inverse, self.chunk_size_feed_forward, self.seq_len_dim, inverse_self_attention_outputs
+            )
+
+        outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
@@ -199,6 +213,11 @@ class ModelLayer(nn.Module):
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
+    
+    def feed_forward_chunk_inverse(self, attention_output):
+        intermediate_output = self.intermediate2(attention_output)
+        layer_output = self.output2(intermediate_output, attention_output)
         return layer_output
 
 
