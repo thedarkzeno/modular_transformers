@@ -332,8 +332,8 @@ class LMUFFT(nn.Module):
 class BiLMUFFT(nn.Module):
     def __init__(self, input_size, hidden_size, memory_size, seq_len, theta):
         super(BiLMUFFT, self).__init__()
-        self.lmu = LMUFFT(input_size, hidden_size, memory_size, seq_len, theta)
-        self.ilmu = LMUFFT(input_size, hidden_size, memory_size, seq_len, theta)
+        self.lmu = LMUFFT(input_size, hidden_size, memory_size//2, seq_len, theta)
+        self.ilmu = LMUFFT(input_size, hidden_size, memory_size//2, seq_len, theta)
         self.norm = nn.LayerNorm(
             hidden_size, eps=1e-12)
     def forward(self, x):

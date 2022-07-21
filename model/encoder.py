@@ -112,11 +112,10 @@ class ModelLayer(nn.Module):
                     f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = Attention(
                 config, position_embedding_type="absolute")
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+        # self.intermediate = BertIntermediate(config)
+        # self.output = BertOutput(config)
         
-        self.intermediate2 = BertIntermediate(config)
-        self.output2 = BertOutput(config)
+
 
 
     def forward(
@@ -217,10 +216,7 @@ class ModelLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
     
-    def feed_forward_chunk_inverse(self, attention_output):
-        intermediate_output = self.intermediate2(attention_output)
-        layer_output = self.output2(intermediate_output, attention_output)
-        return layer_output
+
 
 
 class ModelEncoder(nn.Module):
