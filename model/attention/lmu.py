@@ -329,6 +329,20 @@ class LMUFFT(nn.Module):
 
         return h, h_n
 
+class BiLMUFFT(nn.Module):
+    def __init__(self, input_size, hidden_size, memory_size, seq_len, theta):
+        super(BiLMUFFT, self).__init__()
+        self.lmu = LMUFFT(input_size, hidden_size, memory_size, seq_len, theta)
+        self.ilmu = LMUFFT(input_size, hidden_size, memory_size, seq_len, theta)
+        self.norm = nn.LayerNorm(
+            hidden_size, eps=1e-12)
+    def forward(self, x):
+        x_reversed = torch.flip(x, [1])
+        direct, h_n = self.lmu(x)
+        inverse, h_n_i = self.ilmu(x_reversed)
+        x = self.norm(direct+inverse)
+        return x, h_n
+
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -339,9 +353,9 @@ def get_n_params(model):
     return pp
 
 if __name__ == "__main__":
-    model = LMUFFT(
+    model = BiLMUFFT(
         input_size = 512,
-        hidden_size = 512,
+        hidden_size = 1024,
         memory_size = 768, 
         seq_len = 512, 
         theta = 512
@@ -351,6 +365,7 @@ if __name__ == "__main__":
     x = torch.rand(16, 128, 512) # [batch_size, seq_len, input_size]
     for i in range(10):
         output, h_n = model(x)
+        print(output.shape)
     t2 = time()
     print(t2-t1)
 

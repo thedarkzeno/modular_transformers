@@ -19,7 +19,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     TokenClassifierOutput)
-from .attention import SelfAttention, fourier_transform, inverse_fourier_transform, AttentionHead, LMUFFT
+from .attention import SelfAttention, fourier_transform, inverse_fourier_transform, AttentionHead, BiLMUFFT
 
 
 class Attention(nn.Module):
@@ -86,7 +86,7 @@ class ModelLayer(nn.Module):
             self.attention = fourier_transform  # BertAttention(config)
             self.inverse = inverse_fourier_transform
         elif attention_type == "lmu":
-            self.attention = LMUFFT(
+            self.attention = BiLMUFFT(
                 input_size=config.hidden_size,
                 hidden_size=config.hidden_size,
                 memory_size=config.max_position_embeddings,
@@ -188,21 +188,23 @@ class ModelLayer(nn.Module):
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
-        
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        
-
-        if self.attention_type == "fourier":
-            inverse_self_attention_outputs = self.inverse(
-                layer_output
-            )
+        if self.attention_type != "lmu":
             layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk_inverse, self.chunk_size_feed_forward, self.seq_len_dim, inverse_self_attention_outputs
+                self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
             )
+            
 
-        outputs = (layer_output,) + outputs
+            if self.attention_type == "fourier":
+                inverse_self_attention_outputs = self.inverse(
+                    layer_output
+                )
+                layer_output = apply_chunking_to_forward(
+                self.feed_forward_chunk_inverse, self.chunk_size_feed_forward, self.seq_len_dim, inverse_self_attention_outputs
+                )
+
+            outputs = (layer_output,) + outputs
+        else:
+            outputs = (attention_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
